@@ -1,0 +1,161 @@
+/*******************************
+   Input 1: Light Sensor
+********************************/
+const byte lightPin = A0;
+bool pauseClock = LOW;        // This flag will be used to stop the loop on button press
+int lightValue; 
+int lightThreshold = 250;
+
+/*******************************
+   Input 2: Thermal Sensor
+********************************/
+const byte tempPin = A1;      // Thermal sensor is connected at analog pin 1
+int tempValue;                 // This variable will store temprature value
+int tempThreshold = 700;
+
+/*******************************
+   Input 3: Ultrasonic Distance Sensor 
+********************************/
+const int trigPin = 11;        // Trigger Pin of sensor is connected at digital Pin 5 of Arduino
+const int echoPin = 12;        // Echo Pin of sensor is connected at digital Pin 6 of Arduino
+// Define Variables for distance
+long duration;                 // This will measure time taken by wave to reflect back
+int distance;                  // This will store distance calculated 
+int minDistance = 2;          // Only for min range motion code will work
+int maxDistance = 10;          // With distance less than max motion code will be activated
+
+
+/*******************************
+   Output: LED Light pins configuration
+********************************/
+int ledArray[8] = {3, 4, 5, 6, 7, 8, 9, 10};                    // LED's are connected to these pins                                     
+int defaultDelay = 1000;                                         // Default delay value in milliseconds (default speed of clock moving)
+int currentDelay;                                               // Current delay value that will passed to functions
+int clockDirection = 1;                                         // Determines if the clock runs forward or backwards
+int startingLED = 0;
+
+
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Starting Program");
+  currentDelay = defaultDelay;
+  
+  /************************
+     Setting pins for INPUT
+   ***********************/
+  // Input 1: 
+  pinMode(tempPin, INPUT);
+  // Input 2: Set analog pin 0 as input
+  pinMode(lightPin, INPUT);
+  // Input 3: Setting pins setting of Ultrasonic sensor
+  pinMode(trigPin, OUTPUT);                                     // Sets the trigPin as an Output
+  pinMode(echoPin, INPUT);                                      // Sets the echoPin as an Input
+  
+
+  /************************
+     Setting pins for OUTPUT
+   ***********************/
+  for (int i = 0; i < 8; i++) {                                   // Loop through all pins in array
+    pinMode(ledArray[i], OUTPUT);                                 // Set pins of LED as OUTPUT
+  }
+  turnAllLEDsOff();
+
+}
+
+void loop() {
+  defaultLoop(currentDelay);
+}
+
+
+void defaultLoop(int delayValue) {
+  // This loop will run by default
+  turnAllLEDsOff(); // Turn off All leds
+  int lastLED = 0; 
+  
+  
+  // This will store previous loop value to turn off previously on LED
+  for (int i = startingLED; i < 8 && i >= 0; i = i + clockDirection) {
+    
+    /************************
+    Behaviour 1 (Light Sensor): Rose smelled => Pause the clock
+    */
+    lightValue = analogRead(lightPin);                            // Read Light value from LDR 
+    Serial.print("Light Value: ");Serial.print(lightValue);        // Print Light value on screen
+    boolean smellingRose = lightValue < lightThreshold;  
+    if (smellingRose) {
+      unsigned long timeTrack = millis();                         // store current time
+      Serial.println("Waiting");
+      while (millis() - timeTrack < 5000) {};                    // Wait for 5 seconds 
+      pauseClock = LOW;      // Turn flag LOW
+    }
+    
+  
+    /************************
+    Behaviour 2 (Thermal Sensor): Candle is on => Slow the clock
+    */
+    tempValue = analogRead(tempPin);
+    Serial.print("\t Temp Value: ");Serial.print(tempValue);
+    boolean candleIsOn = tempValue > tempThreshold;
+    if (candleIsOn){                             // Check if light value is less than threshold than slow speed according to value
+      // If the light value drops this threshold than change the delay according to value
+      delayValue = map(tempValue, 500, 1000, defaultDelay, 2000); // Map analog value of temp sensor 500-700 to 500-1500 milliseconds delay
+      Serial.print("\t Delay:"); Serial.println(delayValue);         // Print new Delay on Serial Monitor
+    } 
+    
+    /************************
+    Behaviour 3 (Distance Sensor): Looking at photos => Turn the clock backwards
+    */
+    int distMeasure = distCalculation();                                     // Measure distance by calling dist function
+    Serial.print("\t Distance: ");Serial.println(distMeasure);     // Print distance on screen
+    if (!smellingRose && (distMeasure <= maxDistance) && (distMeasure > minDistance)){ // Check if distance is in between max and min
+      clockDirection = -1;
+      startingLED = 7;
+    }
+    else{
+      startingLED = 0;
+      clockDirection = 1;
+    }
+
+
+    // Update last LED to the current one
+    if (lastLED != i) {                                           // if current value of i is not equal to previous value than turn off previous led
+      digitalWrite(ledArray[lastLED], LOW);
+      lastLED = i;                                                // update previous value with current value
+    }
+    digitalWrite(ledArray[i], HIGH);                              // Turn on LED
+    Serial.print("\nDelay: ");Serial.println(delayValue); 
+    delay(delayValue);                                            // wait for 10 milliseconds
+
+  }                                                               // End of for loop that runs through 8 LEDs
+  
+}
+
+int distCalculation() {
+  // Clears the trigPin
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  duration = pulseIn(echoPin, HIGH);
+  // Calculating the distance
+  distance = duration * 0.034 / 2;
+  return distance;
+}
+
+void turnAllLEDsOff(){
+  // Turn off all LED's
+  for (int i = 0; i < 8; i++) {                                   // Loop through all pins in array
+    digitalWrite(ledArray[i], LOW);                               // Set pins of LED as LOW
+    delay(10);                                                    // wait for 10 milliseconds
+  }
+}
+
+void waitFunction() {
+  // This function will be called when button was pressed
+  pauseClock = HIGH;                                             // Turn flag high
+}
+
